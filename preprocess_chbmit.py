@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Preprocess the CHB-MIT EEG dataset into windowed features suitable for the repo models.
 
-This script mirrors the feature construction strategy popularised in Kaggle notebook
-`masahirogotoh/chb-mit-eeg-dataset-seizure-detection-demo` and adapts it to the
 current project conventions:
 
 * read .edf waveforms with MNE (one recording at a time);
 * keep a consistent set of EEG channels across all files;
+* optionally resample every recording to a shared target sampling rate;
 * generate raw plus seven band-limited feature maps (delta through high-gamma);
 * slice overlapping windows, label them using the official seizure annotations, and
   flatten to a tabular representation;
@@ -82,6 +81,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional text file with one channel per line to force a specific channel ordering.",
+    )
+    parser.add_argument(
+        "--target-sfreq",
+        type=float,
+        default=128.0,
+        help="Resample every recording to this sampling frequency (Hz). Set <= 0 to keep native rate.",
     )
     parser.add_argument(
         "--window-sec",
@@ -328,6 +333,10 @@ def main() -> None:
             raw.notch_filter(freqs=[args.notch_freq], verbose="ERROR")
 
         raw.pick_channels(channel_template, ordered=True)
+        if args.target_sfreq and args.target_sfreq > 0 and not np.isclose(sfreq, args.target_sfreq):
+            raw.resample(args.target_sfreq, npad="auto")
+            sfreq = float(raw.info["sfreq"])
+
         data = raw.get_data().astype(np.float32)
         data -= data.mean(axis=1, keepdims=True)
 
@@ -422,6 +431,7 @@ def main() -> None:
         "bands": DEFAULT_BANDS,
         "window_sec": args.window_sec,
         "stride_sec": args.stride_sec,
+        "target_sfreq": args.target_sfreq,
         "balance_ratio": args.balance_ratio,
     }
     args.metadata_json.parent.mkdir(parents=True, exist_ok=True)
