@@ -1,0 +1,7 @@
+joblib
+mne
+numpy
+pandas
+scikit-learn
+snntorch
+torch
